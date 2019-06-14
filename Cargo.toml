@@ -1,0 +1,17 @@
+[package]
+name = "windows-args"
+version = "0.1.0"
+authors = [
+    "Michael Howell <michael@notriddle.com>",
+    "Michael Lamparski <diagonaldevice@gmail.com>",
+]
+edition = "2018"
+
+[dependencies]
+
+[features]
+
+# Allows compiling the crate on platforms other than Windows.
+#
+# It will not be possible to use the crate at runtime.
+_debug_compile_test = []
