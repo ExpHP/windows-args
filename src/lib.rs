@@ -164,8 +164,6 @@ BadArg: {:?}", input, arg);
     /// This function is intended to be used for strings which **do not** begin with
     /// the executable name.
     ///
-    /// **This function is not suitable for strings that do not contain an executable name.**
-    ///
     /// ```
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let args = windows_args::Args::parse_args_os("  ".as_ref())?;
