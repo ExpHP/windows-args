@@ -6,6 +6,14 @@ authors = [
     "Michael Lamparski <diagonaldevice@gmail.com>",
 ]
 edition = "2018"
+description = "std::env::args for arbitrary strings on Windows"
+repository = "https://github.com/ExpHP/windows-args"
+keywords = ["windows", "cli", "parsing"]
+categories = ["parser-implementations", "configuration"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+
+[badges]
 
 [dependencies]
 
