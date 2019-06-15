@@ -3,7 +3,7 @@
 //! A command-line argument parser for Windows, copied almost wholesale from the rust standard library.
 //!
 //! ```rust
-//! let args = windows_args::Args::parse(r#"foobar to "C:\Program Files\Hi.txt" now"#);
+//! let args = windows_args::Args::parse_cmd(r#"foobar to "C:\Program Files\Hi.txt" now"#);
 //! assert_eq!(args.next(), Some("foobar".to_string()));
 //! assert_eq!(args.next(), Some("to".to_string()));
 //! assert_eq!(args.next(), Some("C:\\Program Files\\Hi.txt".to_string()));
@@ -40,8 +40,8 @@ pub struct ArgsOs { inner: crate::args::Args }
 impl ArgsOs {
     /// Parse an OsStr containing the complete command line.
     ///
-    /// The output will always contain at least one argument (representing the executable name),
-    /// even if the input was empty.
+    /// The output will always contain at least one argument (representing the executable name).
+    /// If the input was empty, a placeholder name is given.
     ///
     /// **This function is not suitable for strings that do not contain an executable name.**
     ///
@@ -62,8 +62,8 @@ impl ArgsOs {
 impl Args {
     /// Parse a string containing the complete command line.
     ///
-    /// The output will always contain at least one argument (representing the executable name),
-    /// even if the input was empty.
+    /// The output will always contain at least one argument (representing the executable name).
+    /// If the input was empty, a placeholder name is given.
     ///
     /// **This function is not suitable for strings that do not contain an executable name.**
     ///
@@ -86,8 +86,8 @@ BadArg: {:?}", input, arg);
 
     /// Parse an `OsStr` containing the complete command line.
     ///
-    /// The output will always contain at least one argument (representing the executable name),
-    /// even if none was provided.
+    /// The output will always contain at least one argument (representing the executable name).
+    /// If the input was empty, a placeholder name is given.
     ///
     /// **This function is not suitable for strings that do not contain an executable name.**
     ///
