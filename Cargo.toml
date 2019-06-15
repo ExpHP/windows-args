@@ -13,10 +13,16 @@ categories = ["parser-implementations", "configuration"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+
 [badges]
 appveyor = { repository = "ExpHP/windows-args", branch = "master", service = "github" }
 
 [dependencies]
+
+[dev-dependencies]
+version-sync = "0.8.1"
 
 [features]
 
@@ -24,3 +30,4 @@ appveyor = { repository = "ExpHP/windows-args", branch = "master", service = "gi
 #
 # It will not be possible to use the crate at runtime.
 _debug_compile_test = []
+

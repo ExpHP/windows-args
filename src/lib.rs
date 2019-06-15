@@ -1,3 +1,5 @@
+#![doc(html_root_url = "https://docs.rs/windows-args/0.1.0")]
+
 //! # `windows-args`
 //!
 //! A command-line argument parser for Windows, copied almost wholesale from the rust standard library.
