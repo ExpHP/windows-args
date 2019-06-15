@@ -78,7 +78,7 @@ impl Args {
     /// ```
     pub fn parse_cmd(input: &str) -> Self {
         Self::parse_cmd_os(input.as_ref())
-            .unwrap_or_else(|NonUtf8Arg { arg }| {
+            .unwrap_or_else(|NonUtf8ArgError { arg }| {
                 panic!("\
 valid UTF-8 became invalid after arg splitting?!
  Input: {:?}
@@ -105,11 +105,11 @@ BadArg: {:?}", input, arg);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn parse_cmd_os(input: &OsStr) -> Result<Self, NonUtf8Arg> {
+    pub fn parse_cmd_os(input: &OsStr) -> Result<Self, NonUtf8ArgError> {
         let inner = ArgsOs::parse_cmd(input)
             .map(|s| s.into_string())
             .collect::<Result<Vec<_>, _>>()
-            .map_err(NonUtf8Arg::new)?
+            .map_err(NonUtf8ArgError::new)?
             .into_iter();
         Ok(Args { inner })
     }
@@ -159,20 +159,21 @@ impl fmt::Debug for ArgsOs {
     }
 }
 
+/// Error type returned by [`Args::parse_cmd_os`] when one of the arguments is not UTF-8.
 #[derive(Debug, Clone)]
-pub struct NonUtf8Arg { arg: OsString }
+pub struct NonUtf8ArgError { arg: OsString }
 
-impl NonUtf8Arg {
-    fn new(arg: OsString) -> Self { NonUtf8Arg { arg } }
+impl NonUtf8ArgError {
+    fn new(arg: OsString) -> Self { NonUtf8ArgError { arg } }
 }
 
-impl fmt::Display for NonUtf8Arg {
+impl fmt::Display for NonUtf8ArgError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "non-utf8 argument: {:?}", self.arg)
     }
 }
 
-impl std::error::Error for NonUtf8Arg { }
+impl std::error::Error for NonUtf8ArgError { }
 
 #[cfg(test)]
 mod tests {
