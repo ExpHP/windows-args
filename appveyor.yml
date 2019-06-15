@@ -16,13 +16,9 @@ environment:
 
     # GNU Toolchains
     - channel: stable
-      target: x86_64-pc-windows-gnu
-    - channel: stable
       target: i686-pc-windows-gnu
     - channel: beta
       target: x86_64-pc-windows-gnu
-    - channel: nightly
-      target: i686-pc-windows-gnu
       #cargoflags: --features "unstable"
 
 matrix:
@@ -42,3 +38,4 @@ build: false
 
 test_script:
   - cargo test --verbose %cargoflags%
+  - cargo test --verbose %cargoflags% --release -- --ignored

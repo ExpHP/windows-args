@@ -76,6 +76,7 @@ fn test_chars() -> impl Iterator<Item=u16> {
 }
 
 #[test]
+#[ignore] // You should only test this on release builds.
 fn command_line_to_argv_w_near_equivalence() {
     // Test with no executable at the beginning
     for a in test_chars() {
