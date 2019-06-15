@@ -70,9 +70,9 @@ extern "system" {
 fn test_chars() -> impl Iterator<Item=u16> {
     // ASCII, which encompasses all control characters for the algorithm
     (0..128)
-        .chain(std::iter::once(0xff)) // something non-ascii
-        .chain(std::iter::once(0xdaaa)) // a high surrogate
-        .chain(std::iter::once(0xdeee)) // a low surrogate
+        .chain(iter::once(0xff)) // something non-ascii
+        .chain(iter::once(0xdaaa)) // a high surrogate
+        .chain(iter::once(0xdeee)) // a low surrogate
 }
 
 #[test]

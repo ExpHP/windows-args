@@ -92,7 +92,7 @@ BadArg: {:?}", input, arg);
     /// **This function is not suitable for strings that do not contain an executable name.**
     ///
     /// ```
-    /// # fn main() -> Result<(), std::error::Error> {
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use std::ffi::OsString;
     ///
     /// let args = windows_args::Args::parse_cmd_os("".as_ref())?;
