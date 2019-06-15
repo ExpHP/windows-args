@@ -100,6 +100,7 @@ BadArg: {:?}", input, arg);
     ///     args.collect::<Vec<_>>(),
     ///     vec!["TEST.EXE".to_string()],
     /// );
+    /// # Ok(())
     /// # }
     /// ```
     pub fn parse_cmd_os(input: &OsStr) -> Result<Self, NonUtf8Arg> {
