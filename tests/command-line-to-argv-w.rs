@@ -29,8 +29,12 @@ unsafe fn old_parser(lp_cmd_line: &[u16]) -> VecDeque<OsString> {
     ret_val
 }
 
+#[link(name="Shell32")]
 extern "system" {
     fn CommandLineToArgvW(lpCmdLine: *const u16, pNumArgs: *mut u32) -> *mut *mut u16;
+}
+#[link(name="Kernel32")]
+extern "system" {
     fn LocalFree(pNumArgs: *mut *mut u16);
 }
 
