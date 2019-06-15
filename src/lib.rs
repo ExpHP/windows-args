@@ -48,13 +48,13 @@ impl ArgsOs {
     /// ```rust
     /// use std::ffi::OsString;
     ///
-    /// let args = windows_args::ArgsOs::parse("test  \" \"".as_ref());
+    /// let args = windows_args::ArgsOs::parse_cmd("test  \" \"".as_ref());
     /// assert_eq!(
     ///     args.collect::<Vec<_>>(),
     ///     vec!["test".into(), " ".into()] as Vec<OsString>,
     /// );
     /// ```
-    pub fn parse(arg_str: &OsStr) -> Self {
+    pub fn parse_cmd(arg_str: &OsStr) -> Self {
         ArgsOs { inner: crate::args::Args::parse(arg_str) }
     }
 }
@@ -68,14 +68,14 @@ impl Args {
     /// **This function is not suitable for strings that do not contain an executable name.**
     ///
     /// ```
-    /// let args = windows_args::Args::parse(r#"me.exe  \\\"#);
+    /// let args = windows_args::Args::parse_cmd(r#"me.exe  \\\"#);
     /// assert_eq!(
     ///     args.collect::<Vec<_>>(),
     ///     vec!["me.exe".to_string(), r#"\\\"#.to_string()],
     /// );
     /// ```
-    pub fn parse(input: &str) -> Self {
-        Self::parse_os(input.as_ref())
+    pub fn parse_cmd(input: &str) -> Self {
+        Self::parse_cmd_os(input.as_ref())
             .unwrap_or_else(|NonUtf8Arg { arg }| {
                 panic!("\
 valid UTF-8 became invalid after arg splitting?!
@@ -95,15 +95,15 @@ BadArg: {:?}", input, arg);
     /// # fn main() -> Result<(), std::error::Error> {
     /// use std::ffi::OsString;
     ///
-    /// let args = windows_args::Args::parse_os("".as_ref())?;
+    /// let args = windows_args::Args::parse_cmd_os("".as_ref())?;
     /// assert_eq!(
     ///     args.collect::<Vec<_>>(),
     ///     vec!["TEST.EXE".to_string()],
     /// );
     /// # }
     /// ```
-    pub fn parse_os(input: &OsStr) -> Result<Self, NonUtf8Arg> {
-        let inner = ArgsOs::parse(input)
+    pub fn parse_cmd_os(input: &OsStr) -> Result<Self, NonUtf8Arg> {
+        let inner = ArgsOs::parse_cmd(input)
             .map(|s| s.into_string())
             .collect::<Result<Vec<_>, _>>()
             .map_err(NonUtf8Arg::new)?
@@ -177,12 +177,12 @@ mod tests {
 
     #[test]
     fn special_traits() {
-        assert_eq!(Args::parse("a b").next_back(), Some("b".into()));
-        assert_eq!(Args::parse_os("a b".as_ref()).unwrap().next_back(), Some("b".into()));
-        assert_eq!(ArgsOs::parse("a b".as_ref()).next_back(), Some("b".into()));
+        assert_eq!(Args::parse_cmd("a b").next_back(), Some("b".into()));
+        assert_eq!(Args::parse_cmd_os("a b".as_ref()).unwrap().next_back(), Some("b".into()));
+        assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).next_back(), Some("b".into()));
 
-        assert_eq!(Args::parse("a b").len(), 2);
-        assert_eq!(Args::parse_os("a b".as_ref()).unwrap().len(), 2);
-        assert_eq!(ArgsOs::parse("a b".as_ref()).len(), 2);
+        assert_eq!(Args::parse_cmd("a b").len(), 2);
+        assert_eq!(Args::parse_cmd_os("a b".as_ref()).unwrap().len(), 2);
+        assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).len(), 2);
     }
 }
