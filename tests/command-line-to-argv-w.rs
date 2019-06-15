@@ -68,9 +68,13 @@ extern "system" {
 }
 
 fn test_chars() -> impl Iterator<Item=u16> {
-    // ASCII, which encompasses all control characters for the algorithm
-    (0..128)
+    iter::once(b'a') // a boring character
+        .chain(b" \t\r\n".iter().cloned()) // whitespace
+        .chain(br##"/\:*?"<>|"##.iter().cloned()) // forbidden by Windows explorer in filenames
+        .chain(b"^%;=&".iter().cloned()) // cmd control characters
+        .chain(iter::once(0x00)) // string terminator
         .chain(iter::once(0xff)) // something non-ascii
+        .map(|x: u8| x as u16)
         .chain(iter::once(0xdaaa)) // a high surrogate
         .chain(iter::once(0xdeee)) // a low surrogate
 }
