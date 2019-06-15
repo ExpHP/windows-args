@@ -38,4 +38,3 @@ build: false
 
 test_script:
   - cargo test --verbose %cargoflags%
-  - cargo test --verbose %cargoflags% --release -- --ignored
