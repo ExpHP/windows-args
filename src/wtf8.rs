@@ -11,7 +11,7 @@ const NO_COMPILE_WITHOUT_WINDOWS: () = {
 };
 
 #[cfg(all(windows, not(feature = "_debug_compile_test")))]
-pub use std::os::windows::ffi::OsStrExt;
+pub use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
 #[cfg(feature = "_debug_compile_test")]
 pub use self::fake_stuff_for_unix_compilation::{OsStrExt, OsStringExt};
