@@ -1,5 +1,8 @@
 #![cfg(windows)]
 
+// Tests that ArgsOs::parse is equivalent to CommandLineToArgvW, except in the case
+// of the empty string.
+
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
@@ -7,8 +10,32 @@ use std::slice;
 use std::iter;
 use std::ptr;
 
+// function that behaves identical to CommandLineToArgvW, implemented in terms of
+// the windows_args crate
 fn new_parser(lp_cmd_line: &[u16]) -> VecDeque<OsString> {
-    windows_args::ArgsOs::parse_cmd(&OsString::from_wide(lp_cmd_line)).collect()
+    let out: VecDeque<OsString> = {
+        windows_args::ArgsOs::parse_cmd(&OsString::from_wide(lp_cmd_line)).collect()
+    };
+
+    match lp_cmd_line[0] {
+        0 => {
+            // CommandLineToArgvW is defined to return the current exe on empty strings;
+            // that doesn't make sense for us, so we return a placeholder.
+            assert_eq!(out, VecDeque::from(vec!["TEST.EXE".into()]));
+            VecDequeue::from(vec![unsafe { current_exe() }])
+        },
+        _ => out,
+    }
+}
+
+unsafe fn current_exe() -> OsString {
+    let mut exe_name: [u16; 4096] = [0; 4096];
+    let ch = GetModuleFileNameW(ptr::null_mut(), &mut exe_name as *mut [u16; 4096] as *mut u16, 4096);
+    if ch == 0 {
+        OsString::new()
+    } else {
+        OsString::from_wide(&exe_name[0..ch as usize])
+    }
 }
 
 unsafe fn old_parser(lp_cmd_line: &[u16]) -> VecDeque<OsString> {
@@ -33,9 +60,11 @@ unsafe fn old_parser(lp_cmd_line: &[u16]) -> VecDeque<OsString> {
 extern "system" {
     fn CommandLineToArgvW(lpCmdLine: *const u16, pNumArgs: *mut u32) -> *mut *mut u16;
 }
+
 #[link(name="Kernel32")]
 extern "system" {
     fn LocalFree(pNumArgs: *mut *mut u16);
+    fn GetModuleFileNameW(hModule: *mut u32, lpFilename: *mut u16, nSize: u32) -> u32;
 }
 
 fn test_chars() -> impl Iterator<Item=u16> {
@@ -47,7 +76,7 @@ fn test_chars() -> impl Iterator<Item=u16> {
 }
 
 #[test]
-fn command_line_to_argv_w_equivalence() {
+fn command_line_to_argv_w_near_equivalence() {
     // Test with no executable at the beginning
     for a in test_chars() {
         println!("{:x}", a);
