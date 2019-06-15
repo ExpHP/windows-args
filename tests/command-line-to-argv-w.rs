@@ -69,6 +69,7 @@ extern "system" {
 
 fn test_chars() -> impl Iterator<Item=u16> {
     iter::once(b'a') // a boring character
+        .chain([2, 4, 6].iter().cloned()) // some characters in the ASCII control plane
         .chain(b" \t\r\n".iter().cloned()) // whitespace
         .chain(br##"/\:*?"<>|"##.iter().cloned()) // forbidden by Windows explorer in filenames
         .chain(b"^%;=&".iter().cloned()) // cmd control characters
