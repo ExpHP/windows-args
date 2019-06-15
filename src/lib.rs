@@ -3,7 +3,9 @@
 //! A command-line argument parser for Windows, copied almost wholesale from the rust standard library.
 //!
 //! ```rust
-//! let args = windows_args::Args::parse_cmd(r#"foobar to "C:\Program Files\Hi.txt" now"#);
+//! use windows_args::Args;
+//!
+//! let mut args = Args::parse_cmd(r#"foobar to "C:\Program Files\Hi.txt" now"#);
 //! assert_eq!(args.next(), Some("foobar".to_string()));
 //! assert_eq!(args.next(), Some("to".to_string()));
 //! assert_eq!(args.next(), Some("C:\\Program Files\\Hi.txt".to_string()));
