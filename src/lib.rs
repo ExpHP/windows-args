@@ -38,18 +38,72 @@ pub struct Args { inner: std::vec::IntoIter<String> }
 pub struct ArgsOs { inner: crate::args::Args }
 
 impl ArgsOs {
+    /// Parse an OsStr containing the complete command line.
+    ///
+    /// The output will always contain at least one argument (representing the executable name),
+    /// even if the input was empty.
+    ///
+    /// **This function is not suitable for strings that do not contain an executable name.**
+    ///
+    /// ```rust
+    /// use std::ffi::OsString;
+    ///
+    /// let args = windows_args::ArgsOs::parse("test  \" \"".as_ref());
+    /// assert_eq!(
+    ///     args.collect::<Vec<_>>(),
+    ///     vec!["test".into(), " ".into()] as Vec<OsString>,
+    /// );
+    /// ```
     pub fn parse(arg_str: &OsStr) -> Self {
         ArgsOs { inner: crate::args::Args::parse(arg_str) }
     }
 }
 
 impl Args {
-    pub fn parse(arg_str: &str) -> Self {
-        Self::parse_os(arg_str.as_ref()).unwrap()
+    /// Parse a string containing the complete command line.
+    ///
+    /// The output will always contain at least one argument (representing the executable name),
+    /// even if the input was empty.
+    ///
+    /// **This function is not suitable for strings that do not contain an executable name.**
+    ///
+    /// ```
+    /// let args = windows_args::Args::parse(r#"me.exe  \\\"#);
+    /// assert_eq!(
+    ///     args.collect::<Vec<_>>(),
+    ///     vec!["me.exe".to_string(), r#"\\\"#.to_string()],
+    /// );
+    /// ```
+    pub fn parse(input: &str) -> Self {
+        Self::parse_os(input.as_ref())
+            .unwrap_or_else(|NonUtf8Arg { arg }| {
+                panic!("\
+valid UTF-8 became invalid after arg splitting?!
+ Input: {:?}
+BadArg: {:?}", input, arg);
+            })
     }
 
-    pub fn parse_os(arg_str: &OsStr) -> Result<Self, NonUtf8Arg> {
-        let inner = ArgsOs::parse(arg_str)
+    /// Parse an `OsStr` containing the complete command line.
+    ///
+    /// The output will always contain at least one argument (representing the executable name),
+    /// even if none was provided.
+    ///
+    /// **This function is not suitable for strings that do not contain an executable name.**
+    ///
+    /// ```
+    /// # fn main() -> Result<(), std::error::Error> {
+    /// use std::ffi::OsString;
+    ///
+    /// let args = windows_args::Args::parse_os("".as_ref())?;
+    /// assert_eq!(
+    ///     args.collect::<Vec<_>>(),
+    ///     vec!["TEST.EXE".to_string()],
+    /// );
+    /// # }
+    /// ```
+    pub fn parse_os(input: &OsStr) -> Result<Self, NonUtf8Arg> {
+        let inner = ArgsOs::parse(input)
             .map(|s| s.into_string())
             .collect::<Result<Vec<_>, _>>()
             .map_err(NonUtf8Arg::new)?
@@ -116,3 +170,19 @@ impl fmt::Display for NonUtf8Arg {
 }
 
 impl std::error::Error for NonUtf8Arg { }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn special_traits() {
+        assert_eq!(Args::parse("a b").next_back(), Some("b".into()));
+        assert_eq!(Args::parse_os("a b".as_ref()).unwrap().next_back(), Some("b".into()));
+        assert_eq!(ArgsOs::parse("a b".as_ref()).next_back(), Some("b".into()));
+
+        assert_eq!(Args::parse("a b").len(), 2);
+        assert_eq!(Args::parse_os("a b".as_ref()).unwrap().len(), 2);
+        assert_eq!(ArgsOs::parse("a b".as_ref()).len(), 2);
+    }
+}
