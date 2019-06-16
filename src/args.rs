@@ -1,19 +1,17 @@
-use std::ffi::{OsStr, OsString};
-use crate::wtf8::{OsStrExt, OsStringExt};
 use std::fmt;
 use std::iter;
+use crate::wtf8like::{IsWtf8Slice, IsWtf8Buf};
 
-pub struct Args {
-    parsed_args_list: std::vec::IntoIter<OsString>,
+pub(crate) struct ArgsWtf8<S> {
+    inner: std::vec::IntoIter<S>,
 }
 
-impl Args {
-    pub fn parse(arg_str: &OsStr) -> Self {
-        let mut wide: Vec<u16> = arg_str.encode_wide().collect();
+impl<S: IsWtf8Buf> ArgsWtf8<S> {
+    pub(crate) fn parse_cmd<I: IsWtf8Slice + ?Sized>(input: &I) -> Self {
+        let mut wide: Vec<_> = input.encode_wide();
         wide.push(0);
 
-        let parsed_args_list = parse_lp_cmd_line(&wide, || OsString::from("TEST.EXE")).into_iter();
-        Args { parsed_args_list }
+        ArgsWtf8 { inner: parse_lp_cmd_line(&wide).into_iter() }
     }
 }
 
@@ -26,7 +24,9 @@ impl Args {
 /// but linking with that DLL causes the process to be registered as a GUI application.
 /// GUI applications add a bunch of overhead, even if no windows are drawn. See
 /// <https://randomascii.wordpress.com/2018/12/03/a-not-called-function-can-cause-a-5x-slowdown/>.
-fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> Vec<OsString> {
+fn parse_lp_cmd_line<S: IsWtf8Buf>(
+    lp_cmd_line: &[u16],
+) -> Vec<S> {
     const BACKSLASH: u16 = '\\' as u16;
     const QUOTE: u16 = '"' as u16;
     const TAB: u16 = '\t' as u16;
@@ -34,7 +34,7 @@ fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> V
 
     let mut ret_val = Vec::new();
     if lp_cmd_line[0] == 0 {
-        ret_val.push(exe_name());
+        ret_val.push(S::from_str("TEST.EXE"));
         return ret_val;
     }
     let mut cmd_line = {
@@ -52,7 +52,7 @@ fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> V
             let args = {
                 let mut cut = cmd_line[1..].splitn(2, |&c| c == QUOTE);
                 if let Some(exe) = cut.next() {
-                    ret_val.push(OsString::from_wide(exe));
+                    ret_val.push(S::from_wide(exe));
                 }
                 cut.next()
             };
@@ -68,7 +68,7 @@ fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> V
         // will consider the first argument to be an empty string. Excess whitespace at the
         // end of lpCmdLine is ignored."
         0..=SPACE => {
-            ret_val.push(OsString::new());
+            ret_val.push(S::from_str(""));
             &cmd_line[1..]
         },
         // The executable name ends at the next whitespace,
@@ -77,7 +77,7 @@ fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> V
             let args = {
                 let mut cut = cmd_line.splitn(2, |&c| c > 0 && c <= SPACE);
                 if let Some(exe) = cut.next() {
-                    ret_val.push(OsString::from_wide(exe));
+                    ret_val.push(S::from_wide(exe));
                 }
                 cut.next()
             };
@@ -119,7 +119,7 @@ fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> V
             SPACE | TAB if !in_quotes => {
                 cur.extend(iter::repeat(b'\\' as u16).take(backslash_count));
                 if !cur.is_empty() || was_in_quotes {
-                    ret_val.push(OsString::from_wide(&cur[..]));
+                    ret_val.push(S::from_wide(&cur[..]));
                     cur.truncate(0);
                 }
                 backslash_count = 0;
@@ -136,53 +136,53 @@ fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> V
     cur.extend(iter::repeat(b'\\' as u16).take(backslash_count));
     // include empty quoted strings at the end of the arguments list
     if !cur.is_empty() || was_in_quotes || in_quotes {
-        ret_val.push(OsString::from_wide(&cur[..]));
+        ret_val.push(S::from_wide(&cur[..]));
     }
     ret_val
 }
 
-pub struct ArgsInnerDebug<'a> {
-    args: &'a Args,
+pub(crate) struct ArgsInnerDebug<'a, S> {
+    args: &'a ArgsWtf8<S>,
 }
 
-impl<'a> fmt::Debug for ArgsInnerDebug<'a> {
+impl<'a, S: fmt::Debug> fmt::Debug for ArgsInnerDebug<'a, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.args.parsed_args_list.as_slice().fmt(f)
+        self.args.inner.as_slice().fmt(f)
     }
 }
 
-impl Args {
-    pub fn inner_debug(&self) -> ArgsInnerDebug<'_> {
+impl<S> ArgsWtf8<S> {
+    pub(crate) fn inner_debug(&self) -> ArgsInnerDebug<'_, S> {
         ArgsInnerDebug {
             args: self
         }
     }
 }
 
-impl Iterator for Args {
-    type Item = OsString;
-    fn next(&mut self) -> Option<OsString> { self.parsed_args_list.next() }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.parsed_args_list.size_hint() }
+impl<S> Iterator for ArgsWtf8<S> {
+    type Item = S;
+    fn next(&mut self) -> Option<S> { self.inner.next() }
+    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
-impl DoubleEndedIterator for Args {
-    fn next_back(&mut self) -> Option<OsString> { self.parsed_args_list.next_back() }
+impl<S> DoubleEndedIterator for ArgsWtf8<S> {
+    fn next_back(&mut self) -> Option<S> { self.inner.next_back() }
 }
 
-impl ExactSizeIterator for Args {
-    fn len(&self) -> usize { self.parsed_args_list.len() }
+impl<S> ExactSizeIterator for ArgsWtf8<S> {
+    fn len(&self) -> usize { self.inner.len() }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
+    use wtf8::Wtf8Buf;
 
     fn chk(string: &str, parts: &[&str]) {
-        let mut wide: Vec<u16> = OsString::from(string).encode_wide().collect();
+        let mut wide: Vec<u16> = Wtf8Buf::from_str(string).to_ill_formed_utf16().collect();
         wide.push(0);
-        let parsed = parse_lp_cmd_line(&wide, || OsString::from("TEST.EXE"));
-        let expected: Vec<OsString> = parts.iter().map(|k| OsString::from(k)).collect();
+        let parsed = parse_lp_cmd_line::<Wtf8Buf>(&wide);
+        let expected: Vec<Wtf8Buf> = parts.iter().map(|k| Wtf8Buf::from_str(k)).collect();
         assert_eq!(parsed.as_slice(), expected.as_slice());
     }
 

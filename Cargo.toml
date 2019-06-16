@@ -20,6 +20,7 @@ default-target = "x86_64-pc-windows-msvc"
 appveyor = { repository = "ExpHP/windows-args", branch = "master", service = "github" }
 
 [dependencies]
+wtf8 = "0.0.3"
 
 [dev-dependencies]
 version-sync = "0.8.1"
