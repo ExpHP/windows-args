@@ -30,24 +30,29 @@
 //! assert_eq!(args.next(), None);
 //! ```
 
+#[cfg(windows)]
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use crate::args::ArgsWtf8;
+use wtf8::{Wtf8, Wtf8Buf};
 
-mod wtf8;
+mod wtf8like;
 mod args;
 
 /// An iterator over the arguments of a process, yielding a [`String`] value for
 /// each argument.
 ///
 /// [`String`]: ../string/struct.String.html
-pub struct Args { inner: std::vec::IntoIter<String> }
+pub struct Args { inner: ArgsWtf8<Wtf8Buf> }
 
 /// An iterator over the arguments of a process, yielding an [`OsString`] value
 /// for each argument.
 ///
 /// [`OsString`]: ../ffi/struct.OsString.html
-pub struct ArgsOs { inner: crate::args::Args }
+#[cfg(windows)]
+pub struct ArgsOs { inner: ArgsWtf8<OsString> }
 
+#[cfg(windows)]
 impl ArgsOs {
     /// Parse an [`OsStr`] containing the complete command line.
     ///
@@ -63,8 +68,8 @@ impl ArgsOs {
     ///     vec!["test".into(), " ".into()] as Vec<OsString>,
     /// );
     /// ```
-    pub fn parse_cmd(arg_str: &OsStr) -> Self {
-        ArgsOs { inner: crate::args::Args::parse(arg_str) }
+    pub fn parse_cmd(input: &OsStr) -> Self {
+        ArgsOs { inner: ArgsWtf8::parse_cmd(input) }
     }
 
     /// Parse an [`OsStr`] containing whitespace-separated arguments to an executable.
@@ -84,10 +89,11 @@ impl ArgsOs {
     pub fn parse_args(input: &OsStr) -> Self {
         parse_args_via_parse_cmd(
             input,
-            |s| Ok::<_, ()>(ArgsOs::parse_cmd(s)),
+            ArgsOs::parse_cmd,
             OsString::with_capacity,
             |buf, s| buf.push(s),
-        ).ok().unwrap()
+            OsStr::len,
+        )
     }
 }
 
@@ -105,20 +111,8 @@ impl Args {
     /// );
     /// ```
     pub fn parse_cmd(input: &str) -> Self {
-        let inner = ArgsOs::parse_cmd(input.as_ref())
-            .map(|s| s.into_string())
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap_or_else(|arg| {
-                panic!("\
-valid UTF-8 became invalid after arg splitting?!
- Input: {:?}
-BadArg: {:?}", input, arg);
-            })
-            .into_iter();
-        Args { inner }
+        Args { inner: ArgsWtf8::parse_cmd(Wtf8::from_str(input)) }
     }
-
-
 
     /// Parse a string containing whitespace-separated arguments to an executable.
     ///
@@ -135,16 +129,26 @@ BadArg: {:?}", input, arg);
     pub fn parse_args(input: &str) -> Self {
         parse_args_via_parse_cmd(
             input,
-            |s| Ok::<_, ()>(Args::parse_cmd(s)),
+            Args::parse_cmd,
             String::with_capacity,
             String::push_str,
-        ).ok().unwrap()
+            str::len,
+        )
     }
+}
+
+fn expect_still_utf8(arg: Wtf8Buf) -> String {
+    arg.into_string().unwrap_or_else(|arg| {
+        panic!("\
+valid UTF-8 became invalid after arg splitting?!
+BadArg: {:?}\
+", arg);
+    })
 }
 
 impl Iterator for Args {
     type Item = String;
-    fn next(&mut self) -> Option<String> { self.inner.next() }
+    fn next(&mut self) -> Option<String> { self.inner.next().map(expect_still_utf8) }
     fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
@@ -153,31 +157,35 @@ impl ExactSizeIterator for Args {
 }
 
 impl DoubleEndedIterator for Args {
-    fn next_back(&mut self) -> Option<String> { self.inner.next_back() }
+    fn next_back(&mut self) -> Option<String> { self.inner.next_back().map(expect_still_utf8) }
 }
 
 impl fmt::Debug for Args {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Args")
-            .field("inner", &self.inner.as_slice())
+            .field("inner", &self.inner.inner_debug())
             .finish()
     }
 }
 
+#[cfg(windows)]
 impl Iterator for ArgsOs {
     type Item = OsString;
     fn next(&mut self) -> Option<OsString> { self.inner.next() }
     fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
+#[cfg(windows)]
 impl ExactSizeIterator for ArgsOs {
     fn len(&self) -> usize { self.inner.len() }
 }
 
+#[cfg(windows)]
 impl DoubleEndedIterator for ArgsOs {
     fn next_back(&mut self) -> Option<OsString> { self.inner.next_back() }
 }
 
+#[cfg(windows)]
 impl fmt::Debug for ArgsOs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ArgsOs")
@@ -186,28 +194,28 @@ impl fmt::Debug for ArgsOs {
     }
 }
 
-fn parse_args_via_parse_cmd<A, E, OwnS, RefS: ?Sized>(
+fn parse_args_via_parse_cmd<A, OwnS, RefS: ?Sized>(
     input: &RefS,
-    parse_cmd: impl FnOnce(&RefS) -> Result<A, E>,
+    parse_cmd: impl FnOnce(&RefS) -> A,
     with_capacity: impl FnOnce(usize) -> OwnS,
     push_str: impl Fn(&mut OwnS, &RefS),
-) -> Result<A, E>
+    len: impl Fn(&RefS) -> usize,
+) -> A
 where
     A: Iterator,
     OwnS: std::ops::Deref<Target=RefS>,
     str: AsRef<RefS>,
-    RefS: AsRef<OsStr>,
 {
     // Prepend a command name
-    let mut modified_input = with_capacity(input.as_ref().len() + 2);
+    let mut modified_input = with_capacity(len(input) + 2);
     push_str(&mut modified_input, "a ".as_ref());
     push_str(&mut modified_input, input);
 
     // Skip the command name in the output
-    let mut out = parse_cmd(&modified_input)?;
+    let mut out = parse_cmd(&modified_input);
     out.next();
 
-    Ok(out)
+    out
 }
 
 #[cfg(test)]
@@ -217,9 +225,13 @@ mod tests {
     #[test]
     fn special_traits() {
         assert_eq!(Args::parse_cmd("a b").next_back(), Some("b".into()));
-        assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).next_back(), Some("b".into()));
-
         assert_eq!(Args::parse_cmd("a b").len(), 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn special_traits_windows() {
+        assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).next_back(), Some("b".into()));
         assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).len(), 2);
     }
 
