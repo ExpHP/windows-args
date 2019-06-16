@@ -12,9 +12,7 @@ impl Args {
         let mut wide: Vec<u16> = arg_str.encode_wide().collect();
         wide.push(0);
 
-        let parsed_args_list = unsafe {
-            parse_lp_cmd_line(wide.as_ptr() as *const u16, || OsString::from("TEST.EXE")).into_iter()
-        };
+        let parsed_args_list = parse_lp_cmd_line(&wide, || OsString::from("TEST.EXE")).into_iter();
         Args { parsed_args_list }
     }
 }
@@ -28,23 +26,23 @@ impl Args {
 /// but linking with that DLL causes the process to be registered as a GUI application.
 /// GUI applications add a bunch of overhead, even if no windows are drawn. See
 /// <https://randomascii.wordpress.com/2018/12/03/a-not-called-function-can-cause-a-5x-slowdown/>.
-unsafe fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: *const u16, exe_name: F)
-                                                 -> Vec<OsString> {
+fn parse_lp_cmd_line<F: Fn() -> OsString>(lp_cmd_line: &[u16], exe_name: F) -> Vec<OsString> {
     const BACKSLASH: u16 = '\\' as u16;
     const QUOTE: u16 = '"' as u16;
     const TAB: u16 = '\t' as u16;
     const SPACE: u16 = ' ' as u16;
+
     let mut ret_val = Vec::new();
-    if lp_cmd_line.is_null() || *lp_cmd_line == 0 {
+    if lp_cmd_line[0] == 0 {
         ret_val.push(exe_name());
         return ret_val;
     }
     let mut cmd_line = {
         let mut end = 0;
-        while *lp_cmd_line.offset(end) != 0 {
+        while lp_cmd_line[end] != 0 {
             end += 1;
         }
-        std::slice::from_raw_parts(lp_cmd_line, end as usize)
+        &lp_cmd_line[..end]
     };
     // The executable name at the beginning is special.
     cmd_line = match cmd_line[0] {
@@ -183,9 +181,7 @@ mod tests {
     fn chk(string: &str, parts: &[&str]) {
         let mut wide: Vec<u16> = OsString::from(string).encode_wide().collect();
         wide.push(0);
-        let parsed = unsafe {
-            parse_lp_cmd_line(wide.as_ptr() as *const u16, || OsString::from("TEST.EXE"))
-        };
+        let parsed = parse_lp_cmd_line(&wide, || OsString::from("TEST.EXE"));
         let expected: Vec<OsString> = parts.iter().map(|k| OsString::from(k)).collect();
         assert_eq!(parsed.as_slice(), expected.as_slice());
     }
