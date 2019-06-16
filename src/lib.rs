@@ -105,14 +105,20 @@ impl Args {
     /// );
     /// ```
     pub fn parse_cmd(input: &str) -> Self {
-        Self::parse_cmd_os(input.as_ref())
-            .unwrap_or_else(|NonUtf8ArgError { arg }| {
+        let inner = ArgsOs::parse_cmd(input.as_ref())
+            .map(|s| s.into_string())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_else(|arg| {
                 panic!("\
 valid UTF-8 became invalid after arg splitting?!
  Input: {:?}
 BadArg: {:?}", input, arg);
             })
+            .into_iter();
+        Args { inner }
     }
+
+
 
     /// Parse a string containing whitespace-separated arguments to an executable.
     ///
@@ -133,54 +139,6 @@ BadArg: {:?}", input, arg);
             String::with_capacity,
             String::push_str,
         ).ok().unwrap()
-    }
-
-    /// Parse an `OsStr` containing the complete command line.
-    ///
-    /// The output will always contain at least one argument (representing the executable name).
-    /// If the input was empty, a placeholder name is given.
-    ///
-    /// ```
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use std::ffi::OsString;
-    ///
-    /// let args = windows_args::Args::parse_cmd_os("".as_ref())?;
-    /// assert_eq!(
-    ///     args.collect::<Vec<_>>(),
-    ///     vec!["TEST.EXE".to_string()],
-    /// );
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn parse_cmd_os(input: &OsStr) -> Result<Self, NonUtf8ArgError> {
-        let inner = ArgsOs::parse_cmd(input)
-            .map(|s| s.into_string())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(NonUtf8ArgError::new)?
-            .into_iter();
-        Ok(Args { inner })
-    }
-
-    /// Parse an `OsStr` containing whitespace-separated arguments to an executable.
-    ///
-    /// This function is intended to be used for strings which **do not** begin with
-    /// the executable name.
-    ///
-    /// ```
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let args = windows_args::Args::parse_args_os("  ".as_ref())?;
-    ///
-    /// assert_eq!(args.collect::<Vec<_>>(), Vec::<String>::new());
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn parse_args_os(input: &OsStr) -> Result<Self, NonUtf8ArgError> {
-        parse_args_via_parse_cmd(
-            input,
-            Args::parse_cmd_os,
-            OsString::with_capacity,
-            |buf, s| buf.push(s),
-        )
     }
 }
 
@@ -252,22 +210,6 @@ where
     Ok(out)
 }
 
-/// Error type returned by [`Args::parse_cmd_os`] when one of the arguments is not UTF-8.
-#[derive(Debug, Clone)]
-pub struct NonUtf8ArgError { arg: OsString }
-
-impl NonUtf8ArgError {
-    fn new(arg: OsString) -> Self { NonUtf8ArgError { arg } }
-}
-
-impl fmt::Display for NonUtf8ArgError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "non-utf8 argument: {:?}", self.arg)
-    }
-}
-
-impl std::error::Error for NonUtf8ArgError { }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,11 +217,9 @@ mod tests {
     #[test]
     fn special_traits() {
         assert_eq!(Args::parse_cmd("a b").next_back(), Some("b".into()));
-        assert_eq!(Args::parse_cmd_os("a b".as_ref()).unwrap().next_back(), Some("b".into()));
         assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).next_back(), Some("b".into()));
 
         assert_eq!(Args::parse_cmd("a b").len(), 2);
-        assert_eq!(Args::parse_cmd_os("a b".as_ref()).unwrap().len(), 2);
         assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).len(), 2);
     }
 
