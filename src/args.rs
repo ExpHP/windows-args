@@ -34,7 +34,12 @@ fn parse_lp_cmd_line<S: IsWtf8Buf>(
 
     let mut ret_val = Vec::new();
     if lp_cmd_line[0] == 0 {
-        ret_val.push(S::from_str("TEST.EXE"));
+        // NOTE: Here, CommandLineToArgvW would produce the current executable name, as
+        //       given by GetModuleFileNameW.
+        //
+        //       For our purposes, it makes more sense to treat this the same way we would
+        //       treat a string consisting entirely of whitespace.
+        ret_val.push(S::from_str(""));
         return ret_val;
     }
     let mut cmd_line = {
@@ -188,8 +193,9 @@ mod tests {
 
     #[test]
     fn empty() {
-        chk("", &["TEST.EXE"]);
-        chk("\0", &["TEST.EXE"]);
+        chk("", &[""]);
+        chk("\0", &[""]);
+        chk(" ", &[""]);
     }
 
     #[test]

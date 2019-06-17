@@ -20,8 +20,8 @@ fn new_parser(lp_cmd_line: &[u16]) -> VecDeque<OsString> {
     match lp_cmd_line[0] {
         0 => {
             // CommandLineToArgvW is defined to return the current exe on empty strings;
-            // that doesn't make sense for us, so we return a placeholder.
-            assert_eq!(out, VecDeque::from(vec!["TEST.EXE".into()]));
+            // that doesn't make sense for us, so we treat it like a pure whitespace input.
+            assert_eq!(out, VecDeque::from(vec!["".into()]));
             VecDeque::from(vec![unsafe { current_exe() }])
         },
         _ => out,

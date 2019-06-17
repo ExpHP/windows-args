@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Removed the single use of `unsafe`.
+- Changed the behavior for the input `""` to produce `[""]` rather than
+  `["TEST.EXE"]`. The new output matches the behavior for an input like `" "`.
 
 ### Removed
 - `Args::parse_args_os`, `Args::parse_cmd_os`, and `NonUtf8ArgError`.

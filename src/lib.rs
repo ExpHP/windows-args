@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn args_cmd_differences() {
-        assert_eq!(Args::parse_cmd("").collect::<Vec<_>>(), vec!["TEST.EXE".to_string()]);
+        assert_eq!(Args::parse_cmd("").collect::<Vec<_>>(), vec![String::new()]);
         assert_eq!(Args::parse_args("").collect::<Vec<_>>(), Vec::<String>::new());
 
         assert_eq!(
