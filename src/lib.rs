@@ -37,6 +37,11 @@ use wtf8::{Wtf8, Wtf8Buf};
 mod wtf8like;
 mod args;
 
+pub use crate::iter::{Iter, IntoIter};
+#[cfg(windows)]
+pub use crate::iter::{IterOs, IntoIterOs};
+mod iter;
+
 /// Arguments to a process (not including the executable), stored as [`String`]s.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Args { inner: ArgsWtf8<Wtf8Buf> }
@@ -92,16 +97,7 @@ impl Command {
     ///
     /// Item type is `&str`.
     pub fn iter(&self) -> Iter<'_> {
-        Iter { inner: Some(&self.exe[..]).into_iter().chain(MapAsStr(self.args.inner.vec.iter())) }
-    }
-}
-
-impl IntoIterator for Command {
-    type Item = String;
-    type IntoIter = IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter { inner: Some(Wtf8Buf::from_string(self.exe)).into_iter().chain(self.args.inner.vec) }
+        Iter::from_cmd(self)
     }
 }
 
@@ -139,17 +135,7 @@ impl CommandOs {
     ///
     /// Item type is `&OsStr`.
     pub fn iter(&self) -> IterOs<'_> {
-        IterOs { inner: Some(&self.exe).into_iter().chain(self.args.inner.vec.iter()) }
-    }
-}
-
-#[cfg(windows)]
-impl IntoIterator for CommandOs {
-    type Item = OsString;
-    type IntoIter = IntoIterOs;
-
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIterOs { inner: Some(self.exe).into_iter().chain(self.args.inner.vec) }
+        IterOs::from_cmd(self)
     }
 }
 
@@ -186,16 +172,7 @@ impl Args {
     ///
     /// Item type is `&str`.
     pub fn iter(&self) -> Iter<'_> {
-        Iter { inner: None.into_iter().chain(MapAsStr(self.inner.vec.iter())) }
-    }
-}
-
-impl IntoIterator for Args {
-    type Item = String;
-    type IntoIter = IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter { inner: None.into_iter().chain(self.inner.vec) }
+        Iter::from_args(self)
     }
 }
 
@@ -235,7 +212,35 @@ impl ArgsOs {
     ///
     /// Item type is `&OsStr`.
     pub fn iter(&self) -> IterOs<'_> {
-        IterOs { inner: None.into_iter().chain(self.inner.vec.iter()) }
+        IterOs::from_args(self)
+    }
+}
+
+impl IntoIterator for Command {
+    type Item = String;
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::from_cmd(self)
+    }
+}
+
+#[cfg(windows)]
+impl IntoIterator for CommandOs {
+    type Item = OsString;
+    type IntoIter = IntoIterOs;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIterOs::from_cmd(self)
+    }
+}
+
+impl IntoIterator for Args {
+    type Item = String;
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::from_args(self)
     }
 }
 
@@ -245,7 +250,7 @@ impl IntoIterator for ArgsOs {
     type IntoIter = IntoIterOs;
 
     fn into_iter(self) -> Self::IntoIter {
-        IntoIterOs { inner: None.into_iter().chain(self.inner.vec) }
+        IntoIterOs::from_args(self)
     }
 }
 
@@ -267,111 +272,12 @@ BadArg: {:?}\
     })
 }
 
-/// Type returned by [`Args::into_iter`].
-#[derive(Debug, Clone)]
-pub struct IntoIter {
-    inner: std::iter::Chain<
-        std::option::IntoIter<Wtf8Buf>,
-        std::vec::IntoIter<Wtf8Buf>,
-    >,
-}
-
-/// Type returned by [`Args::iter`].
-#[derive(Debug, Clone)]
-pub struct Iter<'a> {
-    inner: std::iter::Chain<
-        std::option::IntoIter<&'a str>,
-        MapAsStr<std::slice::Iter<'a, Wtf8Buf>>,
-    >,
-}
-
-/// Type returned by [`ArgsOs::into_iter`].
-#[cfg(windows)]
-#[derive(Debug, Clone)]
-pub struct IntoIterOs {
-    inner: std::iter::Chain<
-        std::option::IntoIter<OsString>,
-        std::vec::IntoIter<OsString>,
-    >,
-}
-
-/// Type returned by [`ArgsOs::iter`].
-#[cfg(windows)]
-#[derive(Debug, Clone)]
-pub struct IterOs<'a> {
-    inner: std::iter::Chain<
-        std::option::IntoIter<&'a OsString>,
-        std::slice::Iter<'a, OsString>,
-    >,
-}
-
-impl Iterator for IntoIter {
-    type Item = String;
-    fn next(&mut self) -> Option<String> { self.inner.next().map(expect_still_utf8_own) }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = &'a str;
-    fn next(&mut self) -> Option<&'a str> { self.inner.next() }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-#[cfg(windows)]
-impl Iterator for IntoIterOs {
-    type Item = OsString;
-    fn next(&mut self) -> Option<OsString> { self.inner.next() }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-#[cfg(windows)]
-impl<'a> Iterator for IterOs<'a> {
-    type Item = &'a OsStr;
-    fn next(&mut self) -> Option<&'a OsStr> { self.inner.next().map(|s| s) }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-impl DoubleEndedIterator for IntoIter {
-    fn next_back(&mut self) -> Option<String> { self.inner.next_back().map(expect_still_utf8_own) }
-}
-
-impl<'a> DoubleEndedIterator for Iter<'a> {
-    fn next_back(&mut self) -> Option<&'a str> { self.inner.next_back() }
-}
-
-#[cfg(windows)]
-impl DoubleEndedIterator for IntoIterOs {
-    fn next_back(&mut self) -> Option<OsString> { self.inner.next_back() }
-}
-
-#[cfg(windows)]
-impl<'a> DoubleEndedIterator for IterOs<'a> {
-    fn next_back(&mut self) -> Option<&'a OsStr> { self.inner.next_back().map(|s| s) }
-}
-
 impl fmt::Debug for Args {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Args")
             .field("vec", &&self.inner.vec[..])
             .finish()
     }
-}
-
-#[cfg(windows)]
-impl Iterator for ArgsOs {
-    type Item = OsString;
-    fn next(&mut self) -> Option<OsString> { self.inner.next() }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-#[cfg(windows)]
-impl ExactSizeIterator for ArgsOs {
-    fn len(&self) -> usize { self.inner.len() }
-}
-
-#[cfg(windows)]
-impl DoubleEndedIterator for ArgsOs {
-    fn next_back(&mut self) -> Option<OsString> { self.inner.next_back() }
 }
 
 #[cfg(windows)]
@@ -400,20 +306,6 @@ where
     push_str(&mut modified_input, "a ".as_ref());
     push_str(&mut modified_input, input);
     project_args(parse_cmd(&modified_input))
-}
-
-// equivalent to `.map(|s: &Wtf8Buf| expect_still_utf8_ref(s))`
-#[derive(Debug, Clone)]
-struct MapAsStr<I>(I);
-
-impl<'a, I: Iterator<Item=&'a Wtf8Buf>> Iterator for MapAsStr<I> {
-    type Item = &'a str;
-    fn next(&mut self) -> Option<&'a str> { self.0.next().map(|s| expect_still_utf8_ref(s)) }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-impl<'a, I: DoubleEndedIterator<Item=&'a Wtf8Buf>> DoubleEndedIterator for MapAsStr<I> {
-    fn next_back(&mut self) -> Option<&'a str> { self.0.next_back().map(|s| expect_still_utf8_ref(s)) }
 }
 
 #[cfg(test)]
