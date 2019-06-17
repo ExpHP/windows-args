@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - This CHANGELOG file.
 - Support for Unix.  This is limited to the `str`-based APIs;
   the `OsStr`-based APIs remain exclusive to Windows.
+- `Args::len`
 
 ### Changed
+- API revamped to more easily support the future addition of the reverse API.
+  * `Args::parse_args` is now `Args::parse`
+  * `Args::parse_cmd` is now `Command::parse`
+- The new `Args` and `Command` types are not iterators, but rather iterables.
 - Removed the single use of `unsafe`.
 - Changed the behavior for the input `""` to produce `[""]` rather than
   `["TEST.EXE"]`. The new output matches the behavior for an input like `" "`.
@@ -19,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Args::parse_args_os`, `Args::parse_cmd_os`, and `NonUtf8ArgError`.
   These don't pull their weight. Use `ArgsOs` instead, and handle conversion
   errors yourself if you need `String`s.
+- The iterators no longer implement `ExactSizeIterator` due to technical
+  limitations.  This may be added back in the future.
 
 ## [0.1.0] - 2019-06-16
 ### Added

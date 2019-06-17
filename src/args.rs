@@ -1,9 +1,9 @@
-use std::fmt;
 use std::iter;
 use crate::wtf8like::{IsWtf8Slice, IsWtf8Buf};
 
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct ArgsWtf8<S> {
-    inner: std::vec::IntoIter<S>,
+    pub(crate) vec: Vec<S>,
 }
 
 impl<S: IsWtf8Buf> ArgsWtf8<S> {
@@ -11,7 +11,7 @@ impl<S: IsWtf8Buf> ArgsWtf8<S> {
         let mut wide: Vec<_> = input.encode_wide();
         wide.push(0);
 
-        ArgsWtf8 { inner: parse_lp_cmd_line(&wide).into_iter() }
+        ArgsWtf8 { vec: parse_lp_cmd_line(&wide) }
     }
 }
 
@@ -144,38 +144,6 @@ fn parse_lp_cmd_line<S: IsWtf8Buf>(
         ret_val.push(S::from_wide(&cur[..]));
     }
     ret_val
-}
-
-pub(crate) struct ArgsInnerDebug<'a, S> {
-    args: &'a ArgsWtf8<S>,
-}
-
-impl<'a, S: fmt::Debug> fmt::Debug for ArgsInnerDebug<'a, S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.args.inner.as_slice().fmt(f)
-    }
-}
-
-impl<S> ArgsWtf8<S> {
-    pub(crate) fn inner_debug(&self) -> ArgsInnerDebug<'_, S> {
-        ArgsInnerDebug {
-            args: self
-        }
-    }
-}
-
-impl<S> Iterator for ArgsWtf8<S> {
-    type Item = S;
-    fn next(&mut self) -> Option<S> { self.inner.next() }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-impl<S> DoubleEndedIterator for ArgsWtf8<S> {
-    fn next_back(&mut self) -> Option<S> { self.inner.next_back() }
-}
-
-impl<S> ExactSizeIterator for ArgsWtf8<S> {
-    fn len(&self) -> usize { self.inner.len() }
 }
 
 #[cfg(test)]

@@ -4,31 +4,29 @@
 //!
 //! A command-line argument parser for Windows, copied almost wholesale from the rust standard library.
 //!
-//! Offerings include:
+//! ## Parsing the command line
 //!
-//! * [`Args`] and [`ArgsOs`], iterators that produce `String` and `OsString` values respectively.
-//! * Two parsing functions, [`Args::parse_cmd`] and [`Args::parse_args`].
-//!     * These differ in how they parse the first argument, and in how they treat empty input.
+//! There are two types, which slightly differ in how they parse input:
 //!
-//! Due to limitations of the current implementation, this crate currently can only be used
-//! on Windows.
+//! * [`Command`] parses a complete command line string, including the executable.
+//! * [`Args`] parses whitespace-separated arguments, without the executable.
 //!
 //! ```rust
-//! use windows_args::Args;
+//! use windows_args::Command;
 //!
-//! // to parse a complete command (beginning with an executable name)
-//! # #[allow(unused)]
-//! let mut args = Args::parse_cmd(r#"foobar.exe to "C:\Program Files\Hi.txt" now"#);
+//! // parse a complete command string (beginning with an executable name)
+//! let cmd = Command::parse(r#"foobar.exe to "C:\Program Files\Hi.txt" now"#);
 //!
-//! // to parse arguments to a command (NOT beginning with an executable name)
-//! let mut args = Args::parse_args(r#"foobar to "C:\Program Files\Hi.txt" now"#);
-//!
-//! assert_eq!(args.next(), Some("foobar".to_string()));
-//! assert_eq!(args.next(), Some("to".to_string()));
-//! assert_eq!(args.next(), Some("C:\\Program Files\\Hi.txt".to_string()));
-//! assert_eq!(args.next(), Some("now".to_string()));
-//! assert_eq!(args.next(), None);
+//! assert_eq!(cmd.len(), 4);
+//! assert_eq!(cmd.exe, "foobar.exe");
+//! assert_eq!(cmd.iter().nth(0), Some("foobar.exe"));
+//! assert_eq!(cmd.into_iter().nth(2), Some("C:\\Program Files\\Hi.txt".to_string()));
 //! ```
+//!
+//! ## `OsString` support
+//!
+//! Exclusive to Windows platforms are the types [`CommandOs`] and [`ArgsOs`], which provide
+//! [`OsString`] support.
 
 #[cfg(windows)]
 use std::ffi::{OsStr, OsString};
@@ -39,39 +37,170 @@ use wtf8::{Wtf8, Wtf8Buf};
 mod wtf8like;
 mod args;
 
-/// An iterator over the arguments of a process, yielding a [`String`] value for
-/// each argument.
-///
-/// [`String`]: ../string/struct.String.html
+/// Arguments to a process (not including the executable), stored as [`String`]s.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Args { inner: ArgsWtf8<Wtf8Buf> }
 
-/// An iterator over the arguments of a process, yielding an [`OsString`] value
-/// for each argument.
-///
-/// [`OsString`]: ../ffi/struct.OsString.html
+/// Arguments to a process (not including the executable), stored as [`OsString`]s.
 #[cfg(windows)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ArgsOs { inner: ArgsWtf8<OsString> }
 
+/// A parsed command-line string, including the executable, stored as [`String`]s.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Command {
+    pub exe: String,
+    pub args: Args,
+}
+
+/// A parsed command-line string, including the executable, stored as [`OsString`]s.
 #[cfg(windows)]
-impl ArgsOs {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOs {
+    pub exe: OsString,
+    pub args: ArgsOs,
+}
+
+impl Command {
+    /// Parse a string containing a complete command line.
+    ///
+    /// The behavior is identical to [`CommandLineToArgvW`], with one minor exception for the
+    /// empty input (which now produces `[""]` rather than the current executable).
+    ///
+    /// [`CommandLineToArgvW`]: https://docs.microsoft.com/en-us/windows/desktop/api/shellapi/nf-shellapi-commandlinetoargvw
+    ///
+    /// ```
+    /// let args = windows_args::Command::parse(r#"me.exe  \\\"#);
+    /// assert_eq!(
+    ///     args.into_iter().collect::<Vec<_>>(),
+    ///     vec!["me.exe".to_string(), r#"\\\"#.to_string()],
+    /// );
+    /// ```
+    pub fn parse(input: &str) -> Self {
+        let mut args = ArgsWtf8::parse_cmd(Wtf8::from_str(input));
+        let exe = expect_still_utf8_own(args.vec.remove(0));
+        let args = Args { inner: args };
+        Command { exe, args }
+    }
+
+    /// Get the length of ARGV, including the executable.
+    pub fn len(&self) -> usize {
+        self.args.len() + 1
+    }
+
+    /// Iterate over the arguments, including the executable.
+    ///
+    /// Item type is `&str`.
+    pub fn iter(&self) -> Iter<'_> {
+        Iter { inner: Some(&self.exe[..]).into_iter().chain(MapAsStr(self.args.inner.vec.iter())) }
+    }
+}
+
+impl IntoIterator for Command {
+    type Item = String;
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter { inner: Some(Wtf8Buf::from_string(self.exe)).into_iter().chain(self.args.inner.vec) }
+    }
+}
+
+#[cfg(windows)]
+impl CommandOs {
     /// Parse an [`OsStr`] containing the complete command line.
     ///
-    /// The output will always contain at least one argument (representing the executable name).
-    /// If the input was empty, a placeholder name is given.
+    /// The behavior is identical to [`CommandLineToArgvW`], with one minor exception for the
+    /// empty input (which now produces `[""]` rather than the current executable).
+    ///
+    /// [`CommandLineToArgvW`]: https://docs.microsoft.com/en-us/windows/desktop/api/shellapi/nf-shellapi-commandlinetoargvw
     ///
     /// ```rust
     /// use std::ffi::OsString;
     ///
-    /// let args = windows_args::ArgsOs::parse_cmd("test  \" \"".as_ref());
+    /// let args = windows_args::CommandOs::parse("test  \" \"".as_ref());
     /// assert_eq!(
-    ///     args.collect::<Vec<_>>(),
+    ///     args.into_iter().collect::<Vec<_>>(),
     ///     vec!["test".into(), " ".into()] as Vec<OsString>,
     /// );
     /// ```
-    pub fn parse_cmd(input: &OsStr) -> Self {
-        ArgsOs { inner: ArgsWtf8::parse_cmd(input) }
+    pub fn parse(input: &OsStr) -> Self {
+        let mut args = ArgsWtf8::parse_cmd(input);
+        let exe = args.vec.remove(0);
+        let args = ArgsOs { inner: args };
+        CommandOs { exe, args }
     }
 
+    /// Get the length of ARGV, including the executable.
+    pub fn len(&self) -> usize {
+        self.args.len() + 1
+    }
+
+    /// Iterate over the arguments, including the executable.
+    ///
+    /// Item type is `&OsStr`.
+    pub fn iter(&self) -> IterOs<'_> {
+        IterOs { inner: Some(&self.exe).into_iter().chain(self.args.inner.vec.iter()) }
+    }
+}
+
+#[cfg(windows)]
+impl IntoIterator for CommandOs {
+    type Item = OsString;
+    type IntoIter = IntoIterOs;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIterOs { inner: Some(self.exe).into_iter().chain(self.args.inner.vec) }
+    }
+}
+
+impl Args {
+    /// Parse a string containing whitespace-separated arguments to an executable.
+    ///
+    /// This function is intended to be used for strings which **do not** begin with
+    /// the executable name.
+    ///
+    /// ```
+    /// let args = windows_args::Args::parse(r#"file.txt  \\\"#);
+    /// assert_eq!(
+    ///     args.into_iter().collect::<Vec<_>>(),
+    ///     vec!["file.txt".to_string(), r#"\\\"#.to_string()],
+    /// );
+    /// ```
+    pub fn parse(input: &str) -> Self {
+        parse_args_via_parse_cmd(
+            input,
+            Command::parse,
+            String::with_capacity,
+            String::push_str,
+            str::len,
+            |cmd| cmd.args,
+        )
+    }
+
+    /// Get the number of arguments.
+    pub fn len(&self) -> usize {
+        self.inner.vec.len()
+    }
+
+    /// Iterate over the arguments.
+    ///
+    /// Item type is `&str`.
+    pub fn iter(&self) -> Iter<'_> {
+        Iter { inner: None.into_iter().chain(MapAsStr(self.inner.vec.iter())) }
+    }
+}
+
+impl IntoIterator for Args {
+    type Item = String;
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter { inner: None.into_iter().chain(self.inner.vec) }
+    }
+}
+
+#[cfg(windows)]
+impl ArgsOs {
     /// Parse an [`OsStr`] containing whitespace-separated arguments to an executable.
     ///
     /// This function is intended to be used for strings which **do not** begin with
@@ -80,64 +209,47 @@ impl ArgsOs {
     /// ```rust
     /// use std::ffi::OsString;
     ///
-    /// let args = windows_args::ArgsOs::parse_args("test  \" \"".as_ref());
+    /// let args = windows_args::ArgsOs::parse("test  \" \"".as_ref());
     /// assert_eq!(
-    ///     args.collect::<Vec<_>>(),
+    ///     args.into_itercollect::<Vec<_>>(),
     ///     vec!["test".into(), " ".into()] as Vec<OsString>,
     /// );
     /// ```
-    pub fn parse_args(input: &OsStr) -> Self {
+    pub fn parse(input: &OsStr) -> Self {
         parse_args_via_parse_cmd(
             input,
-            ArgsOs::parse_cmd,
+            CommandOs::parse,
             OsString::with_capacity,
             |buf, s| buf.push(s),
             OsStr::len,
+            |cmd| cmd.args,
         )
+    }
+
+    /// Get the number of arguments.
+    pub fn len(&self) -> usize {
+        self.inner.vec.len()
+    }
+
+    /// Iterate over the arguments.
+    ///
+    /// Item type is `&OsStr`.
+    pub fn iter(&self) -> IterOs<'_> {
+        IterOs { inner: None.into_iter().chain(self.inner.vec.iter()) }
     }
 }
 
-impl Args {
-    /// Parse a string containing the complete command line.
-    ///
-    /// The output will always contain at least one argument (representing the executable name).
-    /// If the input was empty, a placeholder name is given.
-    ///
-    /// ```
-    /// let args = windows_args::Args::parse_cmd(r#"me.exe  \\\"#);
-    /// assert_eq!(
-    ///     args.collect::<Vec<_>>(),
-    ///     vec!["me.exe".to_string(), r#"\\\"#.to_string()],
-    /// );
-    /// ```
-    pub fn parse_cmd(input: &str) -> Self {
-        Args { inner: ArgsWtf8::parse_cmd(Wtf8::from_str(input)) }
-    }
+#[cfg(windows)]
+impl IntoIterator for ArgsOs {
+    type Item = OsString;
+    type IntoIter = IntoIterOs;
 
-    /// Parse a string containing whitespace-separated arguments to an executable.
-    ///
-    /// This function is intended to be used for strings which **do not** begin with
-    /// the executable name.
-    ///
-    /// ```
-    /// let args = windows_args::Args::parse_args(r#"file.txt  \\\"#);
-    /// assert_eq!(
-    ///     args.collect::<Vec<_>>(),
-    ///     vec!["file.txt".to_string(), r#"\\\"#.to_string()],
-    /// );
-    /// ```
-    pub fn parse_args(input: &str) -> Self {
-        parse_args_via_parse_cmd(
-            input,
-            Args::parse_cmd,
-            String::with_capacity,
-            String::push_str,
-            str::len,
-        )
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIterOs { inner: None.into_iter().chain(self.inner.vec) }
     }
 }
 
-fn expect_still_utf8(arg: Wtf8Buf) -> String {
+fn expect_still_utf8_own(arg: Wtf8Buf) -> String {
     arg.into_string().unwrap_or_else(|arg| {
         panic!("\
 valid UTF-8 became invalid after arg splitting?!
@@ -146,24 +258,101 @@ BadArg: {:?}\
     })
 }
 
-impl Iterator for Args {
+fn expect_still_utf8_ref(arg: &Wtf8Buf) -> &str {
+    arg.as_str().unwrap_or_else(|| {
+        panic!("\
+valid UTF-8 became invalid after arg splitting?!
+BadArg: {:?}\
+", arg);
+    })
+}
+
+/// Type returned by [`Args::into_iter`].
+#[derive(Debug, Clone)]
+pub struct IntoIter {
+    inner: std::iter::Chain<
+        std::option::IntoIter<Wtf8Buf>,
+        std::vec::IntoIter<Wtf8Buf>,
+    >,
+}
+
+/// Type returned by [`Args::iter`].
+#[derive(Debug, Clone)]
+pub struct Iter<'a> {
+    inner: std::iter::Chain<
+        std::option::IntoIter<&'a str>,
+        MapAsStr<std::slice::Iter<'a, Wtf8Buf>>,
+    >,
+}
+
+/// Type returned by [`ArgsOs::into_iter`].
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub struct IntoIterOs {
+    inner: std::iter::Chain<
+        std::option::IntoIter<OsString>,
+        std::vec::IntoIter<OsString>,
+    >,
+}
+
+/// Type returned by [`ArgsOs::iter`].
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub struct IterOs<'a> {
+    inner: std::iter::Chain<
+        std::option::IntoIter<&'a OsString>,
+        std::slice::Iter<'a, OsString>,
+    >,
+}
+
+impl Iterator for IntoIter {
     type Item = String;
-    fn next(&mut self) -> Option<String> { self.inner.next().map(expect_still_utf8) }
+    fn next(&mut self) -> Option<String> { self.inner.next().map(expect_still_utf8_own) }
     fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
-impl ExactSizeIterator for Args {
-    fn len(&self) -> usize { self.inner.len() }
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a str;
+    fn next(&mut self) -> Option<&'a str> { self.inner.next() }
+    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
-impl DoubleEndedIterator for Args {
-    fn next_back(&mut self) -> Option<String> { self.inner.next_back().map(expect_still_utf8) }
+#[cfg(windows)]
+impl Iterator for IntoIterOs {
+    type Item = OsString;
+    fn next(&mut self) -> Option<OsString> { self.inner.next() }
+    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
+}
+
+#[cfg(windows)]
+impl<'a> Iterator for IterOs<'a> {
+    type Item = &'a OsStr;
+    fn next(&mut self) -> Option<&'a OsStr> { self.inner.next().map(|s| s) }
+    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
+}
+
+impl DoubleEndedIterator for IntoIter {
+    fn next_back(&mut self) -> Option<String> { self.inner.next_back().map(expect_still_utf8_own) }
+}
+
+impl<'a> DoubleEndedIterator for Iter<'a> {
+    fn next_back(&mut self) -> Option<&'a str> { self.inner.next_back() }
+}
+
+#[cfg(windows)]
+impl DoubleEndedIterator for IntoIterOs {
+    fn next_back(&mut self) -> Option<OsString> { self.inner.next_back() }
+}
+
+#[cfg(windows)]
+impl<'a> DoubleEndedIterator for IterOs<'a> {
+    fn next_back(&mut self) -> Option<&'a OsStr> { self.inner.next_back().map(|s| s) }
 }
 
 impl fmt::Debug for Args {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Args")
-            .field("inner", &self.inner.inner_debug())
+            .field("vec", &&self.inner.vec[..])
             .finish()
     }
 }
@@ -189,20 +378,20 @@ impl DoubleEndedIterator for ArgsOs {
 impl fmt::Debug for ArgsOs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ArgsOs")
-            .field("inner", &self.inner.inner_debug())
+            .field("vec", &&self.inner.vec[..])
             .finish()
     }
 }
 
-fn parse_args_via_parse_cmd<A, OwnS, RefS: ?Sized>(
+fn parse_args_via_parse_cmd<Args, Command, OwnS, RefS: ?Sized>(
     input: &RefS,
-    parse_cmd: impl FnOnce(&RefS) -> A,
+    parse_cmd: impl FnOnce(&RefS) -> Command,
     with_capacity: impl FnOnce(usize) -> OwnS,
     push_str: impl Fn(&mut OwnS, &RefS),
     len: impl Fn(&RefS) -> usize,
-) -> A
+    project_args: impl FnOnce(Command) -> Args
+) -> Args
 where
-    A: Iterator,
     OwnS: std::ops::Deref<Target=RefS>,
     str: AsRef<RefS>,
 {
@@ -210,12 +399,21 @@ where
     let mut modified_input = with_capacity(len(input) + 2);
     push_str(&mut modified_input, "a ".as_ref());
     push_str(&mut modified_input, input);
+    project_args(parse_cmd(&modified_input))
+}
 
-    // Skip the command name in the output
-    let mut out = parse_cmd(&modified_input);
-    out.next();
+// equivalent to `.map(|s: &Wtf8Buf| expect_still_utf8_ref(s))`
+#[derive(Debug, Clone)]
+struct MapAsStr<I>(I);
 
-    out
+impl<'a, I: Iterator<Item=&'a Wtf8Buf>> Iterator for MapAsStr<I> {
+    type Item = &'a str;
+    fn next(&mut self) -> Option<&'a str> { self.0.next().map(|s| expect_still_utf8_ref(s)) }
+    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
+}
+
+impl<'a, I: DoubleEndedIterator<Item=&'a Wtf8Buf>> DoubleEndedIterator for MapAsStr<I> {
+    fn next_back(&mut self) -> Option<&'a str> { self.0.next_back().map(|s| expect_still_utf8_ref(s)) }
 }
 
 #[cfg(test)]
@@ -224,37 +422,43 @@ mod tests {
 
     #[test]
     fn special_traits() {
-        assert_eq!(Args::parse_cmd("a b").next_back(), Some("b".into()));
-        assert_eq!(Args::parse_cmd("a b").len(), 2);
+        assert_eq!(Command::parse("a b").into_iter().next_back(), Some("b".into()));
+        assert_eq!(Command::parse("a b").iter().next_back(), Some("b"));
+        assert_eq!(Args::parse("a b").into_iter().next_back(), Some("b".into()));
+        assert_eq!(Args::parse("a b").iter().next_back(), Some("b"));
     }
 
     #[cfg(windows)]
     #[test]
     fn special_traits_windows() {
-        assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).next_back(), Some("b".into()));
-        assert_eq!(ArgsOs::parse_cmd("a b".as_ref()).len(), 2);
+        assert_eq!(CommandOs::parse("a b".as_ref()).into_iter().next_back(), Some("b".into()));
+        assert_eq!(CommandOs::parse("a b".as_ref()).iter().next_back(), Some("b".as_ref()));
+        assert_eq!(ArgsOs::parse("a b".as_ref()).into_iter().next_back(), Some("b".into()));
+        assert_eq!(ArgsOs::parse("a b".as_ref()).iter().next_back(), Some("b".as_ref()));
     }
 
     #[test]
     fn args_cmd_differences() {
-        assert_eq!(Args::parse_cmd("").collect::<Vec<_>>(), vec![String::new()]);
-        assert_eq!(Args::parse_args("").collect::<Vec<_>>(), Vec::<String>::new());
+        assert_eq!(Command::parse("").into_iter().collect::<Vec<_>>(), vec![String::new()]);
+        assert_eq!(Args::parse("").into_iter().collect::<Vec<_>>(), Vec::<String>::new());
+        assert_eq!(Command::parse("  ").into_iter().collect::<Vec<_>>(), vec![String::new()]);
+        assert_eq!(Args::parse("  ").into_iter().collect::<Vec<_>>(), Vec::<String>::new());
 
         assert_eq!(
-            Args::parse_cmd(r#""abc\"def""#).collect::<Vec<_>>(),
+            Command::parse(r#""abc\"def""#).into_iter().collect::<Vec<_>>(),
             vec!["abc\\".to_string(), "def".to_string(),
         ]);
         assert_eq!(
-            Args::parse_args(r#""abc\"def""#).collect::<Vec<_>>(),
+            Args::parse(r#""abc\"def""#).into_iter().collect::<Vec<_>>(),
             vec!["abc\"def".to_string()],
         );
 
         assert_eq!(
-            Args::parse_cmd(r#"a "abc\"def""#).collect::<Vec<_>>(),
+            Command::parse(r#"a "abc\"def""#).into_iter().collect::<Vec<_>>(),
             vec!["a".to_string(), "abc\"def".to_string()],
         );
         assert_eq!(
-            Args::parse_cmd(r#"a "abc\"def""#).collect::<Vec<_>>(),
+            Args::parse(r#"a "abc\"def""#).into_iter().collect::<Vec<_>>(),
             vec!["a".to_string(), "abc\"def".to_string()],
         );
     }
