@@ -22,11 +22,18 @@
 //! assert_eq!(cmd.iter().nth(0), Some("foobar.exe"));
 //! assert_eq!(cmd.into_iter().nth(2), Some("C:\\Program Files\\Hi.txt".to_string()));
 //! ```
-//!
-//! ## `OsString` support
-//!
-//! Exclusive to Windows platforms are the types [`CommandOs`] and [`ArgsOs`], which provide
-//! [`OsString`] support.
+#![cfg_attr(windows, doc = "\
+## `OsString` support
+
+Exclusive to Windows platforms are the types [`CommandOs`] and [`ArgsOs`], which provide
+[`std::ffi::OsString`] support.
+")]
+#![cfg_attr(not(windows), doc = "\
+## `OsString` support
+
+Exclusive to Windows platforms are the types `CommandOs` and `ArgsOs`, which provide
+[`std::ffi::OsString`] support.
+")]
 
 #[cfg(windows)]
 use std::ffi::{OsStr, OsString};
@@ -52,6 +59,9 @@ pub struct Args { inner: ArgsWtf8<Wtf8Buf> }
 pub struct ArgsOs { inner: ArgsWtf8<OsString> }
 
 /// A parsed command-line string, including the executable, stored as [`String`]s.
+///
+/// This type is iterable; iterating over it produces the executable path,
+/// followed by the arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Command {
     pub exe: String,
@@ -59,6 +69,9 @@ pub struct Command {
 }
 
 /// A parsed command-line string, including the executable, stored as [`OsString`]s.
+///
+/// This type is iterable; iterating over it produces the executable path,
+/// followed by the arguments.
 #[cfg(windows)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandOs {
