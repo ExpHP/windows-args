@@ -109,7 +109,7 @@ impl Iterator for IntoIterOs {
 #[cfg(windows)]
 impl<'a> Iterator for IterOs<'a> {
     type Item = &'a OsStr;
-    fn next(&mut self) -> Option<&'a OsStr> { self.inner.next().map(|s| s) }
+    fn next(&mut self) -> Option<&'a OsStr> { self.inner.next().map(|s| &s[..]) }
     fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
@@ -128,7 +128,7 @@ impl DoubleEndedIterator for IntoIterOs {
 
 #[cfg(windows)]
 impl<'a> DoubleEndedIterator for IterOs<'a> {
-    fn next_back(&mut self) -> Option<&'a OsStr> { self.inner.next_back().map(|s| s) }
+    fn next_back(&mut self) -> Option<&'a OsStr> { self.inner.next_back().map(|s| &s[..]) }
 }
 
 // equivalent to `.map(|s: &Wtf8Buf| expect_still_utf8_ref(s))`
