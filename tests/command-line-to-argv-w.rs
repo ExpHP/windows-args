@@ -14,7 +14,7 @@ use std::ptr;
 // the windows_args crate
 fn new_parser(lp_cmd_line: &[u16]) -> VecDeque<OsString> {
     let out: VecDeque<OsString> = {
-        windows_args::ArgsOs::parse_cmd(&OsString::from_wide(lp_cmd_line)).collect()
+        windows_args::CommandOs::parse(&OsString::from_wide(lp_cmd_line)).into_iter().collect()
     };
 
     match lp_cmd_line[0] {
