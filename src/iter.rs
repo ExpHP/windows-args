@@ -131,23 +131,6 @@ impl<'a> DoubleEndedIterator for IterOs<'a> {
     fn next_back(&mut self) -> Option<&'a OsStr> { self.inner.next_back().map(|s| s) }
 }
 
-#[cfg(windows)]
-impl Iterator for ArgsOs {
-    type Item = OsString;
-    fn next(&mut self) -> Option<OsString> { self.inner.next() }
-    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
-}
-
-#[cfg(windows)]
-impl ExactSizeIterator for ArgsOs {
-    fn len(&self) -> usize { self.inner.len() }
-}
-
-#[cfg(windows)]
-impl DoubleEndedIterator for ArgsOs {
-    fn next_back(&mut self) -> Option<OsString> { self.inner.next_back() }
-}
-
 // equivalent to `.map(|s: &Wtf8Buf| expect_still_utf8_ref(s))`
 #[derive(Debug, Clone)]
 struct MapAsStr<I>(I);
