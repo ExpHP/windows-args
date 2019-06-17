@@ -201,7 +201,7 @@ impl ArgsOs {
     ///
     /// let args = windows_args::ArgsOs::parse("test  \" \"".as_ref());
     /// assert_eq!(
-    ///     args.into_itercollect::<Vec<_>>(),
+    ///     args.into_iter().collect::<Vec<_>>(),
     ///     vec!["test".into(), " ".into()] as Vec<OsString>,
     /// );
     /// ```
