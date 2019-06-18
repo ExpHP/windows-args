@@ -25,10 +25,3 @@ wtf8 = "0.0.3"
 [dev-dependencies]
 version-sync = "0.8.1"
 
-[features]
-
-# Allows compiling the crate on platforms other than Windows.
-#
-# It will not be possible to use the crate at runtime.
-_debug_compile_test = []
-
