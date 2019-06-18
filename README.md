@@ -4,7 +4,7 @@ A command-line argument parser for Windows, copied almost wholesale from the rus
 
 ```toml
 [dependencies]
-windows-args = "0.1"
+windows-args = "0.2"
 ```
 
 ```rust
