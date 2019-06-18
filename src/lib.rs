@@ -6,12 +6,11 @@
 //!
 //! Offerings include:
 //!
-//! * [`Args`] and [`ArgsOs`], iterators that produce `String` and `OsString` values respectively.
+//! * [`Args`] and `ArgsOs`, iterators that produce `String` and `OsString` values respectively.
 //! * Two parsing functions, [`Args::parse_cmd`] and [`Args::parse_args`].
 //!     * These differ in how they parse the first argument, and in how they treat empty input.
 //!
-//! Due to limitations of the current implementation, this crate currently can only be used
-//! on Windows.
+//! `ArgsOs` is only available on Windows.
 //!
 //! ```rust
 //! use windows_args::Args;
@@ -45,6 +44,7 @@ mod args;
 /// [`String`]: ../string/struct.String.html
 pub struct Args { inner: ArgsWtf8<Wtf8Buf> }
 
+/// **Windows only.**
 /// An iterator over the arguments of a process, yielding an [`OsString`] value
 /// for each argument.
 ///
